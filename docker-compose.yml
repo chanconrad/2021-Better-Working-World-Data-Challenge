@@ -10,7 +10,7 @@ services:
     ports:
       - 5432:5432
     restart: always
-  
+
   jupyter:
     image: geoscienceaustralia/sandbox
     environment:
@@ -20,8 +20,9 @@ services:
       - DB_DATABASE=opendatacube
       - AWS_NO_SIGN_REQUEST=true
       - AWS_DEFAULT_REGION=ap-southeast-2
+      - JUPYTER_ALLOW_INSECURE_WRITES=true
     ports:
-      - "80:8888"
+      - "8888:8888"
     volumes:
       - ./install-cube.sh:/usr/local/bin/install-cube.sh
       - ./scripts:/scripts
