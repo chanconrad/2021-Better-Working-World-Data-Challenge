@@ -1,6 +1,8 @@
 import pandas as pd
 import geopandas as gpd
 from datacube import Datacube
+import cv2
+import numpy as np
 
 import sys
 
@@ -141,9 +143,37 @@ class Threshold(Solution):
     def set_threshold(self, threshold):
         self.threshold = threshold
 
+    def set_open_kernel(self, size):
+        self.kernel_open = self._kernel(size)
+
+    def set_close_kernel(self, size):
+        self.kernel_close = self._kernel(size)
+
+    @staticmethod
+    def _kernel(size):
+        upper_size = int(np.ceil(size))
+        kernel = np.ones((upper_size, upper_size))
+
+        smooth = 1.0 - (upper_size - size)
+        kernel[ 0, :] = smooth
+        kernel[-1, :] = smooth
+        kernel[: , 0] = smooth
+        kernel[: ,-1] = smooth
+
+        return kernel
+
     def mask(self, linescan):
         """Generate mask from linescan"""
 
         mask = linescan > self.threshold
+        floatmask = np.array(mask, dtype='f8')[0,:,:]
+
+        # Remove noise
+        mask_open = cv2.morphologyEx(floatmask, cv2.MORPH_OPEN, self.kernel_open)
+
+        # Close holes
+        mask_close = cv2.morphologyEx(mask_open, cv2.MORPH_CLOSE, self.kernel_close)
+
+        mask[0,:,:] = mask_close > 0.0
 
         return mask
