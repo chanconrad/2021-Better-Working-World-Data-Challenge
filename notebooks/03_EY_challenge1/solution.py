@@ -33,6 +33,10 @@ class Solution:
             lambda row: self._clean_name(row.SourceName), axis=1
         )
 
+        # Data caches
+        self.linescan_cache = {}
+        self.raster_cache = {}
+
     @staticmethod
     def _clean_name(name):
         """Make filenames match"""
@@ -70,23 +74,33 @@ class Solution:
         )
         print(f"{100 * len(matched_polygons) / len(self.gdf):.1f}% of polygons used")
 
+    def cached_load(self, linescan_id):
+        if linescan_id not in self.linescan_cache:
+            src = self.dc.load(
+                    product="linescan",
+                    id=linescan_id,
+                    output_crs="epsg:28355",
+                    resolution=(-10, 10),
+                )
+            self.linescan_cache[linescan_id] = src
+        return self.linescan_cache[linescan_id]
+
+    def cached_rasterize(self, matches, src, linescan_id):
+        if linescan_id not in self.raster_cache:
+            self.raster_cache[linescan_id] = xr_rasterize(gdf=matches, da=src)
+
+        return self.raster_cache[linescan_id]
+
     def error_fraction(self):
         """Fraction of incorrect points"""
         total_error = 0
         total_points = 0
         for ls in self.training_data:
-            src = self.dc.load(
-                product="linescan",
-                id=ls.id,
-                output_crs="epsg:28355",
-                resolution=(-10, 10),
-            )
+            src = self.cached_load(ls.id)
             matches = self.training_data[ls]
 
             # Rasterise polygon
-            target = xr_rasterize(gdf=matches, da=src)
-
-            mask = self.mask(src.linescan)
+            target = self.cached_rasterize(matches, src, ls.id)
 
             # Number of errors
             error = target != self.mask(src.linescan)
