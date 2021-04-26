@@ -144,19 +144,11 @@ class Threshold(Solution):
         self.threshold = threshold
 
     def set_close_kernel(self, size):
-        self.kernel_close = self._kernel(size)
+        self.kernel_close = self._kernel(int(size))
 
     @staticmethod
     def _kernel(size):
-        upper_size = int(np.ceil(size))
-        kernel = np.ones((upper_size, upper_size))
-
-        smooth = 1.0 - (upper_size - size)
-        kernel[ 0, :] = smooth
-        kernel[-1, :] = smooth
-        kernel[: , 0] = smooth
-        kernel[: ,-1] = smooth
-
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (size, size))
         return kernel
 
     def mask(self, linescan):
@@ -165,11 +157,8 @@ class Threshold(Solution):
         mask = linescan > self.threshold
         floatmask = np.array(mask, dtype='f8')[0,:,:]
 
-        # Remove noise
-        mask_open = cv2.morphologyEx(floatmask, cv2.MORPH_OPEN, self.kernel_open)
-
         # Close holes
-        mask_close = cv2.morphologyEx(mask_open, cv2.MORPH_CLOSE, self.kernel_close)
+        mask_close = cv2.morphologyEx(floatmask, cv2.MORPH_CLOSE, self.kernel_close)
 
         mask[0,:,:] = mask_close > 0.0
 
