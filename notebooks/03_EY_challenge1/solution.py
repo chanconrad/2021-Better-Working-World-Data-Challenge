@@ -143,9 +143,6 @@ class Threshold(Solution):
     def set_threshold(self, threshold):
         self.threshold = threshold
 
-    def set_open_kernel(self, size):
-        self.kernel_open = self._kernel(size)
-
     def set_close_kernel(self, size):
         self.kernel_close = self._kernel(size)
 
