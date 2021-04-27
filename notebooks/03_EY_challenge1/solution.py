@@ -1,6 +1,8 @@
 import pandas as pd
 import geopandas as gpd
 from datacube import Datacube
+import cv2
+import numpy as np
 
 import sys
 
@@ -32,6 +34,10 @@ class Solution:
         self.gdf["SourceNameClean"] = self.gdf.apply(
             lambda row: self._clean_name(row.SourceName), axis=1
         )
+
+        # Data caches
+        self.linescan_cache = {}
+        self.raster_cache = {}
 
     @staticmethod
     def _clean_name(name):
@@ -70,23 +76,33 @@ class Solution:
         )
         print(f"{100 * len(matched_polygons) / len(self.gdf):.1f}% of polygons used")
 
+    def cached_load(self, linescan_id):
+        if linescan_id not in self.linescan_cache:
+            src = self.dc.load(
+                    product="linescan",
+                    id=linescan_id,
+                    output_crs="epsg:28355",
+                    resolution=(-10, 10),
+                )
+            self.linescan_cache[linescan_id] = src
+        return self.linescan_cache[linescan_id]
+
+    def cached_rasterize(self, matches, src, linescan_id):
+        if linescan_id not in self.raster_cache:
+            self.raster_cache[linescan_id] = xr_rasterize(gdf=matches, da=src)
+
+        return self.raster_cache[linescan_id]
+
     def error_fraction(self):
         """Fraction of incorrect points"""
         total_error = 0
         total_points = 0
         for ls in self.training_data:
-            src = self.dc.load(
-                product="linescan",
-                id=ls.id,
-                output_crs="epsg:28355",
-                resolution=(-10, 10),
-            )
+            src = self.cached_load(ls.id)
             matches = self.training_data[ls]
 
             # Rasterise polygon
-            target = xr_rasterize(gdf=matches, da=src)
-
-            mask = self.mask(src.linescan)
+            target = self.cached_rasterize(matches, src, ls.id)
 
             # Number of errors
             error = target != self.mask(src.linescan)
@@ -127,9 +143,23 @@ class Threshold(Solution):
     def set_threshold(self, threshold):
         self.threshold = threshold
 
+    def set_close_kernel(self, size):
+        self.kernel_close = self._kernel(int(size))
+
+    @staticmethod
+    def _kernel(size):
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (size, size))
+        return kernel
+
     def mask(self, linescan):
         """Generate mask from linescan"""
 
         mask = linescan > self.threshold
+        floatmask = np.array(mask, dtype='f8')[0,:,:]
+
+        # Close holes
+        mask_close = cv2.morphologyEx(floatmask, cv2.MORPH_CLOSE, self.kernel_close)
+
+        mask[0,:,:] = mask_close > 0.0
 
         return mask
