@@ -11,6 +11,10 @@ from dea_spatialtools import xr_rasterize
 
 
 class Solution:
+    """
+    Base class for a solution
+    Need to define a subclass with a mask() function
+    """
     def __init__(self):
         # Load the datacube
         self.dc = Datacube(app="Getting started")
@@ -140,21 +144,48 @@ class Solution:
 
 
 class Threshold(Solution):
+    """
+    Use a simple threshold to determine if a pixel is on fire
+    """
     def set_threshold(self, threshold):
         self.threshold = threshold
 
     def set_close_kernel(self, size):
-        self.kernel_close = self._kernel(int(size))
+        self.kernel_close = self._kernel(max(int(size),1))
 
     @staticmethod
     def _kernel(size):
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (size, size))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
         return kernel
 
     def mask(self, linescan):
         """Generate mask from linescan"""
 
         mask = linescan > self.threshold
+        floatmask = np.array(mask, dtype='f8')[0,:,:]
+
+        # Close holes
+        mask_close = cv2.morphologyEx(floatmask, cv2.MORPH_CLOSE, self.kernel_close)
+
+        mask[0,:,:] = mask_close > 0.0
+
+        return mask
+
+
+class AutoThreshold(Threshold):
+    """
+    Use the deviation from mean as a threshold
+    """
+    def set_threshold(self, threshold_std):
+        self.threshold_std = threshold_std
+
+    def mask(self, linescan):
+        """Generate mask from linescan"""
+
+        mean = linescan.mean()
+        std = linescan.std()
+
+        mask = linescan > mean + std * self.threshold_std
         floatmask = np.array(mask, dtype='f8')[0,:,:]
 
         # Close holes
