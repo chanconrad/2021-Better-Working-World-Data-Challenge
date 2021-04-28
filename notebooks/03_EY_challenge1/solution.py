@@ -115,6 +115,39 @@ class Solution:
 
         return float(total_error / total_points)
 
+    def f1_score(self):
+        """
+        Score used by Challenge to evaluate solution
+        https://en.wikipedia.org/wiki/F-score
+        """
+        tp = 0
+        tn = 0
+        fp = 0
+        fn = 0
+
+        for ls in self.training_data:
+            src = self.cached_load(ls.id)
+            matches = self.training_data[ls]
+
+            # Rasterise polygon
+            target = self.cached_rasterize(matches, src, ls.id)
+
+            # Solution mask
+            mask = self.mask(src.linescan)
+
+            # True positives and negatives
+            tp += int(np.sum(target * mask))
+            tn += int(np.sum(target + mask == 0))
+
+            # False positives and negatives
+            fp += int(np.sum((target == 1) * (mask == 0)))
+            fn += int(np.sum((target == 0) * (mask == 1)))
+
+        p = tp / (tp + fp)
+        r = tp / (tp + fn)
+
+        return 2*p*r/(p+r)
+
     def generate_submission(self, filename):
         """Generate the submission file using challenge data"""
 
