@@ -143,10 +143,19 @@ class Solution:
             fp += int(np.sum((target == 1) * (mask == 0)))
             fn += int(np.sum((target == 0) * (mask == 1)))
 
-        p = tp / (tp + fp)
-        r = tp / (tp + fn)
+        if tp > 0:
+            p = tp / (tp + fp)
+            r = tp / (tp + fn)
+        else:
+            p = 0
+            r = 0
 
-        return 2*p*r/(p+r)
+        if p + r > 0:
+            f1 = 2*p*r/(p+r)
+        else:
+            f1 = 0
+
+        return f1
 
     def generate_submission(self, filename):
         """Generate the submission file using challenge data"""
