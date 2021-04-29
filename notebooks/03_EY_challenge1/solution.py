@@ -11,6 +11,10 @@ from dea_spatialtools import xr_rasterize
 
 
 class Solution:
+    """
+    Base class for a solution
+    Need to define a subclass with a mask() function
+    """
     def __init__(self):
         # Load the datacube
         self.dc = Datacube(app="Getting started")
@@ -111,6 +115,48 @@ class Solution:
 
         return float(total_error / total_points)
 
+    def f1_score(self):
+        """
+        Score used by Challenge to evaluate solution
+        https://en.wikipedia.org/wiki/F-score
+        """
+        tp = 0
+        tn = 0
+        fp = 0
+        fn = 0
+
+        for ls in self.training_data:
+            src = self.cached_load(ls.id)
+            matches = self.training_data[ls]
+
+            # Rasterise polygon
+            target = self.cached_rasterize(matches, src, ls.id)
+
+            # Solution mask
+            mask = self.mask(src.linescan)
+
+            # True positives and negatives
+            tp += int(np.sum(target * mask))
+            tn += int(np.sum(target + mask == 0))
+
+            # False positives and negatives
+            fp += int(np.sum((target == 1) * (mask == 0)))
+            fn += int(np.sum((target == 0) * (mask == 1)))
+
+        if tp > 0:
+            p = tp / (tp + fp)
+            r = tp / (tp + fn)
+        else:
+            p = 0
+            r = 0
+
+        if p + r > 0:
+            f1 = 2*p*r/(p+r)
+        else:
+            f1 = 0
+
+        return f1
+
     def generate_submission(self, filename):
         """Generate the submission file using challenge data"""
 
@@ -140,21 +186,48 @@ class Solution:
 
 
 class Threshold(Solution):
+    """
+    Use a simple threshold to determine if a pixel is on fire
+    """
     def set_threshold(self, threshold):
         self.threshold = threshold
 
     def set_close_kernel(self, size):
-        self.kernel_close = self._kernel(int(size))
+        self.kernel_close = self._kernel(max(int(size),1))
 
     @staticmethod
     def _kernel(size):
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (size, size))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
         return kernel
 
     def mask(self, linescan):
         """Generate mask from linescan"""
 
         mask = linescan > self.threshold
+        floatmask = np.array(mask, dtype='f8')[0,:,:]
+
+        # Close holes
+        mask_close = cv2.morphologyEx(floatmask, cv2.MORPH_CLOSE, self.kernel_close)
+
+        mask[0,:,:] = mask_close > 0.0
+
+        return mask
+
+
+class AutoThreshold(Threshold):
+    """
+    Use the deviation from mean as a threshold
+    """
+    def set_threshold(self, threshold_std):
+        self.threshold_std = threshold_std
+
+    def mask(self, linescan):
+        """Generate mask from linescan"""
+
+        mean = linescan.mean()
+        std = linescan.std()
+
+        mask = linescan > mean + std * self.threshold_std
         floatmask = np.array(mask, dtype='f8')[0,:,:]
 
         # Close holes
